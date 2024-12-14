@@ -2,3 +2,5 @@ apps:
   - name: storage
     selects:
       - sw/storage
+    context:
+      - nrf52840dk

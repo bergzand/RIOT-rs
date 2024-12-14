@@ -3,39 +3,57 @@
 #![feature(impl_trait_in_assoc_type)]
 #![feature(used_with_arg)]
 
+use ariel_os::hal::peripherals;
+use ariel_os::{
+    gpio::{Input, Level, Output, Pull},
+    time::{Duration, Timer},
+};
+
 use ariel_os::debug::{
     exit,
     log::{defmt, info},
+    EXIT_SUCCESS,
 };
 
 // Imports for using [`ariel_os::storage`]
 use ariel_os::storage;
 use serde::{Deserialize, Serialize};
 
-// Some object. For storing it, derive the serde Serialize / Deserialize traits.
+// Example object.
+// The serde Serialize / Deserialize traits are required for storage
 #[derive(Serialize, Deserialize, Debug, defmt::Format)]
 struct MyConfig {
     val_uno: heapless::String<64>,
     val_dos: u64,
 }
 
-#[ariel_os::task(autostart)]
-async fn main() {
+ariel_os::define_peripherals!(Peripherals {
+    led1: P0_13,
+    btn1: P0_11
+});
+
+#[ariel_os::task(autostart, peripherals)]
+async fn blinky(peripherals: Peripherals) {
+    let mut led1 = Output::new(peripherals.led1, Level::Low);
+    led1.toggle();
+    Timer::after(Duration::from_millis(2000)).await;
     info!("Hello from storage test!");
 
     // Storing a primitive type (e.g., u32)
     let value: Option<u32> = storage::get("counter").await.unwrap();
     let value = if let Some(value) = value {
-        info!("got counter value {}", value);
+        info!("got counter value {} from storage", value);
         value
     } else {
-        info!("no counter value. first time running this test? try rebooting.");
+        info!("no counter value in storage. Is this the first time running this example?");
         0
     };
 
     if value > 10 {
-        info!("counter value > 10, aborting test to safe flash cycles.");
-        exit(Ok(()));
+        info!("counter value > 10, aborting test to save flash cycles.");
+        led1.toggle();
+        Timer::after(Duration::from_millis(2000)).await;
+        exit(EXIT_SUCCESS);
     }
 
     storage::insert("counter", value + 1).await.unwrap();
@@ -53,7 +71,7 @@ async fn main() {
     // For insertion, a literal can be used.
     storage::insert("string_key", "string_value").await.unwrap();
 
-    // Getting a string value
+    // Retrieve a string value
     if let Some(string) = storage::get::<heapless::String<64>>("string_key")
         .await
         .unwrap()
@@ -110,5 +128,7 @@ async fn main() {
     }
     info!("bye from storage test!");
 
-    exit(Ok(()));
+    led1.toggle();
+    Timer::after(Duration::from_millis(2000)).await;
+    exit(EXIT_SUCCESS);
 }
